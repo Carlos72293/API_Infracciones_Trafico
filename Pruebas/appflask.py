@@ -9,7 +9,7 @@ os.chdir(os.path.dirname(__file__))
 app = Flask(__name__)
 
 # Cargar el modelo
-with open('model.pkl', 'rb') as f:
+with open('../model.pkl', 'rb') as f:
     model = pickle.load(f)
 
 
