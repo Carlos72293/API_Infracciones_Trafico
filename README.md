@@ -178,23 +178,3 @@ Todos los campos son **obligatorios**. Si alguno falta o está fuera de rango, F
 El campo `probability` (disponible en POST individual y batch) indica la confianza del modelo en la clase de riesgo alto. Cuanto más cercano a `1`, mayor certeza.
 
 ---
-
-## Ejemplo con curl
-
-```bash
-# Predicción individual
-curl -X POST http://127.0.0.1:8000/api/v1/predict \
-  -H "Content-Type: application/json" \
-  -d '{"sexo": 1, "novel": 0, "edad": 3, "num_infracciones": 2}'
-
-# Predicción batch
-curl -X POST http://127.0.0.1:8000/api/v1/predict/batch \
-  -H "Content-Type: application/json" \
-  -d '{"registros": [{"sexo": 1, "novel": 0, "edad": 3, "num_infracciones": 2}]}'
-
-# Predicción por URL (GET)
-curl "http://127.0.0.1:8000/api/v1/predict?sexo=1&novel=0&edad=3&num_infracciones=2"
-
-# Info del modelo
-curl http://127.0.0.1:8000/api/v1/model/info
-```
