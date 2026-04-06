@@ -1,12 +1,20 @@
-from flask import Flask, jsonify, request
+from fastapi import FastAPI, Query, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
+from pydantic import BaseModel, Field
+from typing import Optional, List
 import os
 import pickle
 import pandas as pd
 import numpy as np
+import uvicorn
 
 os.chdir(os.path.dirname(__file__))
 
-app = Flask(__name__)
+app = FastAPI(
+    title="MotorRisk Analytics",
+    description="Plataforma de evaluación predictiva para aseguradoras de automóviles",
+    version="1.0.0"
+)
 
 # Cargar el modelo
 with open('model.pkl', 'rb') as f:
@@ -14,8 +22,40 @@ with open('model.pkl', 'rb') as f:
 
 
 
+# MODELOS PYDANTIC
+
+class ConductorInput(BaseModel):
+    sexo: int = Field(..., ge=0, le=1, description="Sexo del conductor (0 o 1)")
+    novel: int = Field(..., ge=0, le=1, description="Conductor novel (0 o 1)")
+    edad: int = Field(..., ge=1, le=6, description="Tramo de edad codificado (1 a 6)")
+    num_infracciones: int = Field(..., ge=0, description="Número de infracciones registradas")
+
+class BatchInput(BaseModel):
+    registros: List[ConductorInput] = Field(..., min_length=1, description="Lista de conductores a evaluar")
+
+
+# HELPERS
+
+def run_prediction(sexo, novel, edad, num_infracciones, include_proba=False):
+    input_data = pd.DataFrame({
+        'SEXO': [sexo], 'NOVEL': [novel],
+        'EDAD': [edad], 'NUM_INFRACCIONES': [num_infracciones]
+    })
+    prediction = model.predict(input_data)
+    result = {"prediction": int(prediction[0]), "missing": []}
+    if include_proba:
+        try:
+            prob = model.predict_proba(input_data)[0][1]
+            result["probability"] = float(prob)
+        except Exception:
+            result["probability"] = None
+    return result
+
+
+
 # LANDING PAGE
-@app.route('/', methods=["GET"])
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def hello():
     return """
     <html>
@@ -247,6 +287,7 @@ def hello():
                     <div class="nav-links">
                         <a class="nav-link" href="/model/info">🔍 Info del modelo</a>
                         <a class="nav-link" href="/predict/batch">📋 Predicción batch</a>
+                        <a class="nav-link" href="/docs">📄 Swagger UI</a>
                     </div>
                 </div>
 
@@ -259,10 +300,10 @@ def hello():
             <script>
                 function hacerPrediccion() {
                     const data = {
-                        sexo: document.getElementById("sexo").value,
-                        novel: document.getElementById("novel").value,
-                        edad: document.getElementById("edad").value,
-                        num_infracciones: document.getElementById("num_infracciones").value
+                        sexo: parseInt(document.getElementById("sexo").value),
+                        novel: parseInt(document.getElementById("novel").value),
+                        edad: parseInt(document.getElementById("edad").value),
+                        num_infracciones: parseInt(document.getElementById("num_infracciones").value)
                     };
                     fetch('/api/v1/predict', {
                         method: 'POST',
@@ -273,7 +314,7 @@ def hello():
                     .then(data => {
                         document.getElementById("resultado").textContent = JSON.stringify(data, null, 2);
                         let box = document.getElementById("resultado_box");
-                        if (data.error) {
+                        if (data.detail) {
                             box.className = "result-box high-risk";
                             box.innerHTML = "⚠️ Error en la petición: revisa los campos obligatorios y sus valores.";
                             return;
@@ -301,101 +342,34 @@ def hello():
 
 
 
-# HELPERS
-def to_float(val):
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return np.nan
-
-
-def validate_inputs(sexo, novel, edad):
-    errors = []
-    if not np.isnan(sexo) and sexo not in (0.0, 1.0):
-        errors.append("SEXO debe ser 0 o 1")
-    if not np.isnan(novel) and novel not in (0.0, 1.0):
-        errors.append("NOVEL debe ser 0 o 1")
-    if not np.isnan(edad) and edad not in (1.0, 2.0, 3.0, 4.0, 5.0, 6.0):
-        errors.append("EDAD debe ser un número entre 1 y 6")
-    return errors
-
-
-def get_missing(sexo, novel, edad, num_infracciones):
-    return [
-        name for name, val in [
-            ('SEXO', sexo), ('NOVEL', novel),
-            ('EDAD', edad), ('NUM_INFRACCIONES', num_infracciones)
-        ]
-        if np.isnan(val)
-    ]
-
-
-def run_prediction(sexo, novel, edad, num_infracciones, include_proba=False):
-    input_data = pd.DataFrame({
-        'SEXO': [sexo], 'NOVEL': [novel],
-        'EDAD': [edad], 'NUM_INFRACCIONES': [num_infracciones]
-    })
-    prediction = model.predict(input_data)
-    result = {"prediction": int(prediction[0]), "missing": []}
-    if include_proba:
-        try:
-            prob = model.predict_proba(input_data)[0][1]
-            result["probability"] = float(prob)
-        except Exception:
-            result["probability"] = None
-    return result
-
-
-
 # PREDICT — GET
-@app.route('/api/v1/predict', methods=["GET"])
-def predict_get():
-    args = {k.lower(): v for k, v in request.args.items()}
 
-    sexo             = to_float(args.get('sexo'))
-    novel            = to_float(args.get('novel'))
-    edad             = to_float(args.get('edad'))
-    num_infracciones = to_float(args.get('num_infracciones'))
+@app.get("/api/v1/predict", summary="Predicción individual (GET)")
+def predict_get(
+    sexo: int = Query(..., ge=0, le=1, description="Sexo del conductor (0 o 1)"),
+    novel: int = Query(..., ge=0, le=1, description="Conductor novel (0 o 1)"),
+    edad: int = Query(..., ge=1, le=6, description="Tramo de edad (1 a 6)"),
+    num_infracciones: int = Query(..., ge=0, description="Número de infracciones")
+):
+    return run_prediction(sexo, novel, edad, num_infracciones)
 
-    errors = validate_inputs(sexo, novel, edad)
-    if errors:
-        return jsonify({'error': errors}), 400
-
-    missing = get_missing(sexo, novel, edad, num_infracciones)
-    if missing:
-        return jsonify({"error": "Faltan variables obligatorias", "missing": missing}), 400
-
-    return jsonify(run_prediction(sexo, novel, edad, num_infracciones))
 
 
 # PREDICT — POST
-@app.route('/api/v1/predict', methods=["POST"])
-def predict_post():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "No se ha enviado JSON"}), 400
 
-    args = {k.lower(): v for k, v in data.items()}
-
-    sexo             = to_float(args.get('sexo'))
-    novel            = to_float(args.get('novel'))
-    edad             = to_float(args.get('edad'))
-    num_infracciones = to_float(args.get('num_infracciones'))
-
-    errors = validate_inputs(sexo, novel, edad)
-    if errors:
-        return jsonify({'error': errors}), 400
-
-    missing = get_missing(sexo, novel, edad, num_infracciones)
-    if missing:
-        return jsonify({"error": "Faltan variables obligatorias", "missing": missing}), 400
-
-    return jsonify(run_prediction(sexo, novel, edad, num_infracciones, include_proba=True))
+@app.post("/api/v1/predict", summary="Predicción individual (POST)")
+def predict_post(conductor: ConductorInput):
+    return run_prediction(
+        conductor.sexo, conductor.novel,
+        conductor.edad, conductor.num_infracciones,
+        include_proba=True
+    )
 
 
 
 # MODEL INFO — API JSON
-@app.route('/api/v1/model/info', methods=["GET"])
+
+@app.get("/api/v1/model/info", summary="Información del modelo")
 def model_info_api():
     info = {
         "model_type": type(model).__name__,
@@ -409,8 +383,6 @@ def model_info_api():
         "target": "Riesgo de infracción grave (0 = bajo, 1 = alto)",
         "supports_proba": hasattr(model, 'predict_proba')
     }
-
-    # Intentar extraer métricas si el modelo las expone
     if hasattr(model, 'classes_'):
         info["classes"] = [int(c) for c in model.classes_]
     if hasattr(model, 'n_estimators'):
@@ -418,12 +390,13 @@ def model_info_api():
     if hasattr(model, 'max_depth'):
         info["max_depth"] = model.max_depth
 
-    return jsonify(info)
+    return info
 
 
 
 # MODEL INFO — HTML interactivo
-@app.route('/model/info', methods=["GET"])
+
+@app.get("/model/info", response_class=HTMLResponse, include_in_schema=False)
 def model_info_html():
     return """
     <html>
@@ -516,48 +489,29 @@ def model_info_html():
 
 
 # PREDICT BATCH — API JSON
-@app.route('/api/v1/predict/batch', methods=["POST"])
-def predict_batch_api():
-    data = request.get_json()
-    if not data or 'registros' not in data:
-        return jsonify({"error": "Se esperaba un JSON con clave 'registros' (array de conductores)"}), 400
 
-    registros = data['registros']
-    if not isinstance(registros, list) or len(registros) == 0:
-        return jsonify({"error": "'registros' debe ser una lista no vacía"}), 400
-
+@app.post("/api/v1/predict/batch", summary="Predicción por lotes")
+def predict_batch_api(batch: BatchInput):
     resultados = []
-    for i, reg in enumerate(registros):
-        args = {k.lower(): v for k, v in reg.items()}
-
-        sexo             = to_float(args.get('sexo'))
-        novel            = to_float(args.get('novel'))
-        edad             = to_float(args.get('edad'))
-        num_infracciones = to_float(args.get('num_infracciones'))
-
-        errors = validate_inputs(sexo, novel, edad)
-        if errors:
-            resultados.append({"index": i, "error": errors})
-            continue
-
-        missing = get_missing(sexo, novel, edad, num_infracciones)
-        if missing:
-            resultados.append({"index": i, "error": "Faltan variables obligatorias", "missing": missing})
-            continue
-
-        result = run_prediction(sexo, novel, edad, num_infracciones, include_proba=True)
+    for i, conductor in enumerate(batch.registros):
+        result = run_prediction(
+            conductor.sexo, conductor.novel,
+            conductor.edad, conductor.num_infracciones,
+            include_proba=True
+        )
         result["index"] = i
         resultados.append(result)
 
-    return jsonify({
-        "total": len(registros),
+    return {
+        "total": len(batch.registros),
         "resultados": resultados
-    })
+    }
 
 
 
 # PREDICT BATCH — HTML interactivo
-@app.route('/predict/batch', methods=["GET"])
+
+@app.get("/predict/batch", response_class=HTMLResponse, include_in_schema=False)
 def predict_batch_html():
     return """
     <html>
@@ -651,9 +605,9 @@ def predict_batch_html():
                     .then(data => {
                         document.getElementById('json_raw').textContent = JSON.stringify(data, null, 2);
 
-                        if (data.error) {
+                        if (data.detail) {
                             document.getElementById('tabla_resultados').style.display = 'none';
-                            alert('Error: ' + data.error);
+                            alert('Error: ' + JSON.stringify(data.detail));
                             return;
                         }
 
@@ -662,15 +616,11 @@ def predict_batch_html():
 
                         let html = '<table><thead><tr><th>#</th><th>Predicción</th><th>Probabilidad</th><th>Estado</th></tr></thead><tbody>';
                         for (const r of data.resultados) {
-                            if (r.error) {
-                                html += `<tr><td>${r.index}</td><td colspan="3" class="err">⚠️ Error: ${JSON.stringify(r.error)}</td></tr>`;
-                            } else {
-                                const risk = r.prediction === 1;
-                                const label = risk ? '<span class="high">⚠️ Riesgo ALTO</span>' : '<span class="low">✅ Riesgo BAJO</span>';
-                                const prob = r.probability !== null && r.probability !== undefined
-                                    ? (r.probability * 100).toFixed(1) + '%' : 'N/A';
-                                html += `<tr><td>${r.index}</td><td>${r.prediction}</td><td>${prob}</td><td>${label}</td></tr>`;
-                            }
+                            const risk = r.prediction === 1;
+                            const label = risk ? '<span class="high">⚠️ Riesgo ALTO</span>' : '<span class="low">✅ Riesgo BAJO</span>';
+                            const prob = r.probability !== null && r.probability !== undefined
+                                ? (r.probability * 100).toFixed(1) + '%' : 'N/A';
+                            html += `<tr><td>${r.index}</td><td>${r.prediction}</td><td>${prob}</td><td>${label}</td></tr>`;
                         }
                         html += '</tbody></table>';
 
@@ -689,5 +639,6 @@ def predict_batch_html():
 
 
 # RUN
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
