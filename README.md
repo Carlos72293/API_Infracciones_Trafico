@@ -160,12 +160,23 @@ Envía un array de conductores y recibe una predicción por cada registro. La va
 
 | Variable | Tipo | Valores válidos | Descripción |
 |----------|------|-----------------|-------------|
-| `sexo` | int | `0` o `1` | Sexo del conductor |
-| `novel` | int | `0` o `1` | Indica si es conductor novel |
-| `edad` | int | `1` a `6` | Tramo de edad codificado |
+| `sexo` | int | `0` o `1` | Sexo del conductor · `0` = Mujer, `1` = Hombre |
+| `novel` | int | `0` o `1` | Conductor novel · `0` = No, `1` = Sí (carné ≤ 2 años) |
+| `edad` | int | `1` a `6` | Tramo de edad codificado (ver tabla inferior) |
 | `num_infracciones` | int | ≥ 0 | Número de infracciones registradas |
 
 Todos los campos son **obligatorios**. Si alguno falta o está fuera de rango, FastAPI devuelve automáticamente un error `422` con detalle campo a campo.
+
+### Equivalencia de tramos de edad
+
+| Código | Rango aproximado |
+|--------|-----------------|
+| `1` | 18–24 años |
+| `2` | 25–34 años |
+| `3` | 35–44 años |
+| `4` | 45–54 años |
+| `5` | 55–64 años |
+| `6` | 65 o más años |
 
 ---
 
@@ -177,5 +188,11 @@ Todos los campos son **obligatorios**. Si alguno falta o está fuera de rango, F
 | `1` | Riesgo **alto** — el modelo clasifica el perfil como propenso a infracción grave |
 
 El campo `probability` (disponible en POST individual y batch) indica la confianza del modelo en la clase de riesgo alto. Cuanto más cercano a `1`, mayor certeza.
+
+| Rango de probabilidad | Interpretación |
+|-----------------------|---------------|
+| < 0.30 | Perfil claramente de bajo riesgo |
+| 0.30 – 0.60 | Zona de incertidumbre |
+| > 0.60 | Perfil claramente de alto riesgo |
 
 ---
