@@ -25,10 +25,10 @@ with open('model.pkl', 'rb') as f:
 # MODELOS PYDANTIC
 
 class ConductorInput(BaseModel):
-    sexo: int = Field(..., ge=0, le=1, description="Sexo del conductor (0 o 1)")
-    novel: int = Field(..., ge=0, le=1, description="Conductor novel (0 o 1)")
-    edad: int = Field(..., ge=1, le=6, description="Tramo de edad codificado (1 a 6)")
-    num_infracciones: int = Field(..., ge=0, description="Número de infracciones registradas")
+    sexo: int = Field(..., ge=0, le=1, description="Sexo del conductor · 0 = Mujer, 1 = Hombre")
+    novel: int = Field(..., ge=0, le=1, description="Conductor novel · 0 = No (experimentado), 1 = Sí (carné ≤ 2 años)")
+    edad: int = Field(..., ge=1, le=6, description="Tramo de edad · 1=18-24, 2=25-34, 3=35-44, 4=45-54, 5=55-64, 6=65+")
+    num_infracciones: int = Field(..., ge=0, description="Número de infracciones registradas (entero ≥ 0)")
 
 class BatchInput(BaseModel):
     registros: List[ConductorInput] = Field(..., min_length=1, description="Lista de conductores a evaluar")
@@ -96,7 +96,7 @@ def hello():
                 h3 { color: #223b63; margin-top: 22px; margin-bottom: 10px; font-size: 18px; }
                 h4 { margin-top: 16px; margin-bottom: 8px; font-size: 15px; color: #304563; }
                 label { font-weight: 600; display: block; margin-bottom: 6px; margin-top: 12px; }
-                input, textarea {
+                input, textarea, select {
                     width: 100%;
                     padding: 12px;
                     margin: 0 0 8px 0;
@@ -107,7 +107,7 @@ def hello():
                     background-color: #fbfcfe;
                     font-family: inherit;
                 }
-                input:focus, textarea:focus {
+                input:focus, textarea:focus, select:focus {
                     outline: none;
                     border-color: #305f9b;
                     box-shadow: 0 0 0 3px rgba(48, 95, 155, 0.12);
@@ -222,17 +222,35 @@ def hello():
                         Introduce las variables del asegurado para obtener una predicción automática sobre el riesgo de infracción grave.
                     </p>
 
-                    <label>Sexo (0 o 1)</label>
-                    <input type="number" id="sexo" placeholder="Ejemplo: 1">
+                    <label>Sexo</label>
+                    <select id="sexo">
+                        <option value="" disabled selected>Selecciona...</option>
+                        <option value="1">1 — Hombre</option>
+                        <option value="0">0 — Mujer</option>
+                    </select>
 
-                    <label>Conductor novel (0 o 1)</label>
-                    <input type="number" id="novel" placeholder="Ejemplo: 0">
+                    <label>¿Es conductor novel?</label>
+                    <select id="novel">
+                        <option value="" disabled selected>Selecciona...</option>
+                        <option value="0">0 — No (conductor experimentado)</option>
+                        <option value="1">1 — Sí (carné reciente, ≤ 2 años)</option>
+                    </select>
 
-                    <label>Edad (1 a 6)</label>
-                    <input type="number" id="edad" placeholder="Ejemplo: 3">
+                    <label>Tramo de edad</label>
+                    <select id="edad">
+                        <option value="" disabled selected>Selecciona...</option>
+                        <option value="1">1 — 18–24 años</option>
+                        <option value="2">2 — 25–34 años</option>
+                        <option value="3">3 — 35–44 años</option>
+                        <option value="4">4 — 45–54 años</option>
+                        <option value="5">5 — 55–64 años</option>
+                        <option value="6">6 — 65 o más años</option>
+                    </select>
 
-                    <label>Número de infracciones</label>
-                    <input type="number" id="num_infracciones" placeholder="Ejemplo: 2">
+                    <label>Número de infracciones registradas</label>
+                    <input type="number" id="num_infracciones" placeholder="Ej: 0, 1, 2..." min="0">
+
+                    <div id="validation_errors" style="display:none; color:#b33939; font-size:13px; margin:8px 0; background:#fdeeee; padding:10px 12px; border-radius:8px; border:1px solid #f1c0c0; line-height:1.6;"></div>
 
                     <button onclick="hacerPrediccion()">Evaluar riesgo</button>
 
@@ -262,7 +280,7 @@ def hello():
                     <pre>GET /api/v1/predict?sexo=1&amp;novel=0&amp;edad=3&amp;num_infracciones=2</pre>
 
                     <h3>3. GET /api/v1/model/info</h3>
-                    <p class="info-text">Metadatos del modelo: tipo, features esperadas y métricas.</p>
+                    <p class="info-text">Metadatos del modelo: tipo, features esperadas y parámetros del estimador.</p>
                     <pre>GET /api/v1/model/info</pre>
 
                     <h3>4. POST /api/v1/predict/batch</h3>
@@ -277,10 +295,10 @@ def hello():
 
                     <h3>5. Variables de entrada</h3>
                     <ul>
-                        <li><b>sexo</b>: 0 o 1.</li>
-                        <li><b>novel</b>: conductor novel, 0 o 1.</li>
-                        <li><b>edad</b>: tramo de edad entre 1 y 6.</li>
-                        <li><b>num_infracciones</b>: número de infracciones registradas.</li>
+                        <li><b>sexo</b>: <code>0</code> = Mujer · <code>1</code> = Hombre.</li>
+                        <li><b>novel</b>: <code>0</code> = No novel · <code>1</code> = Conductor novel (carné ≤ 2 años).</li>
+                        <li><b>edad</b>: tramo 1–6 (1=18-24, 2=25-34, 3=35-44, 4=45-54, 5=55-64, 6=65+).</li>
+                        <li><b>num_infracciones</b>: entero ≥ 0, infracciones registradas.</li>
                     </ul>
 
                     <h3>Páginas interactivas</h3>
@@ -299,12 +317,34 @@ def hello():
 
             <script>
                 function hacerPrediccion() {
+                    const sexoVal = document.getElementById("sexo").value;
+                    const novelVal = document.getElementById("novel").value;
+                    const edadVal = document.getElementById("edad").value;
+                    const infrVal = document.getElementById("num_infracciones").value;
+
+                    const errores = [];
+                    if (sexoVal === "") errores.push("• <b>Sexo</b>: selecciona una opción.");
+                    if (novelVal === "") errores.push("• <b>Conductor novel</b>: selecciona una opción.");
+                    if (edadVal === "") errores.push("• <b>Tramo de edad</b>: selecciona una opción.");
+                    if (infrVal === "" || isNaN(parseInt(infrVal)) || parseInt(infrVal) < 0) {
+                        errores.push("• <b>Infracciones</b>: introduce un número entero ≥ 0.");
+                    }
+
+                    const errDiv = document.getElementById("validation_errors");
+                    if (errores.length > 0) {
+                        errDiv.style.display = "block";
+                        errDiv.innerHTML = "<b>Revisa los siguientes campos:</b><br>" + errores.join("<br>");
+                        return;
+                    }
+                    errDiv.style.display = "none";
+
                     const data = {
-                        sexo: parseInt(document.getElementById("sexo").value),
-                        novel: parseInt(document.getElementById("novel").value),
-                        edad: parseInt(document.getElementById("edad").value),
-                        num_infracciones: parseInt(document.getElementById("num_infracciones").value)
+                        sexo: parseInt(sexoVal),
+                        novel: parseInt(novelVal),
+                        edad: parseInt(edadVal),
+                        num_infracciones: parseInt(infrVal)
                     };
+
                     fetch('/api/v1/predict', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -315,16 +355,34 @@ def hello():
                         document.getElementById("resultado").textContent = JSON.stringify(data, null, 2);
                         let box = document.getElementById("resultado_box");
                         if (data.detail) {
+                            let errMsg = "<b>⚠️ Error de validación:</b><br>";
+                            if (Array.isArray(data.detail)) {
+                                data.detail.forEach(e => {
+                                    const campo = e.loc ? e.loc[e.loc.length - 1] : "campo";
+                                    errMsg += `• <b>${campo}</b>: ${e.msg}<br>`;
+                                });
+                            } else {
+                                errMsg += data.detail;
+                            }
                             box.className = "result-box high-risk";
-                            box.innerHTML = "⚠️ Error en la petición: revisa los campos obligatorios y sus valores.";
+                            box.innerHTML = errMsg;
                             return;
+                        }
+                        const prob = (data.probability !== null && data.probability !== undefined)
+                            ? (data.probability * 100).toFixed(1) : null;
+                        const probText = prob !== null ? ` · Probabilidad: <b>${prob}%</b>` : '';
+                        let interp = '';
+                        if (data.probability !== null && data.probability !== undefined) {
+                            if (data.probability < 0.3) interp = ' — perfil claramente de bajo riesgo.';
+                            else if (data.probability < 0.6) interp = ' — zona de incertidumbre.';
+                            else interp = ' — perfil claramente de alto riesgo.';
                         }
                         if (data.prediction === 1) {
                             box.className = "result-box high-risk";
-                            box.innerHTML = "⚠️ Riesgo ALTO: el modelo clasifica este perfil como propenso a infracción grave.";
+                            box.innerHTML = `⚠️ <b>Riesgo ALTO</b>${probText}${interp}`;
                         } else {
                             box.className = "result-box low-risk";
-                            box.innerHTML = "✅ Riesgo BAJO: el modelo clasifica este perfil como no grave.";
+                            box.innerHTML = `✅ <b>Riesgo BAJO</b>${probText}${interp}`;
                         }
                     })
                     .catch(err => {
@@ -346,10 +404,10 @@ def hello():
 
 @app.get("/api/v1/predict", summary="Predicción individual (GET)")
 def predict_get(
-    sexo: int = Query(..., ge=0, le=1, description="Sexo del conductor (0 o 1)"),
-    novel: int = Query(..., ge=0, le=1, description="Conductor novel (0 o 1)"),
-    edad: int = Query(..., ge=1, le=6, description="Tramo de edad (1 a 6)"),
-    num_infracciones: int = Query(..., ge=0, description="Número de infracciones")
+    sexo: int = Query(..., ge=0, le=1, description="Sexo · 0 = Mujer, 1 = Hombre"),
+    novel: int = Query(..., ge=0, le=1, description="Conductor novel · 0 = No, 1 = Sí (carné ≤ 2 años)"),
+    edad: int = Query(..., ge=1, le=6, description="Tramo de edad · 1=18-24, 2=25-34, 3=35-44, 4=45-54, 5=55-64, 6=65+"),
+    num_infracciones: int = Query(..., ge=0, description="Número de infracciones registradas (≥ 0)")
 ):
     return run_prediction(sexo, novel, edad, num_infracciones)
 
@@ -375,12 +433,12 @@ def model_info_api():
         "model_type": type(model).__name__,
         "features": ["SEXO", "NOVEL", "EDAD", "NUM_INFRACCIONES"],
         "feature_descriptions": {
-            "SEXO": "Sexo del conductor (0 o 1)",
-            "NOVEL": "Conductor novel (0 o 1)",
-            "EDAD": "Tramo de edad codificado (1 a 6)",
-            "NUM_INFRACCIONES": "Número de infracciones registradas"
+            "SEXO": "Sexo del conductor · 0 = Mujer, 1 = Hombre",
+            "NOVEL": "Conductor novel · 0 = No (experimentado), 1 = Sí (carné ≤ 2 años)",
+            "EDAD": "Tramo de edad · 1=18-24, 2=25-34, 3=35-44, 4=45-54, 5=55-64, 6=65+",
+            "NUM_INFRACCIONES": "Número de infracciones registradas (entero ≥ 0)"
         },
-        "target": "Riesgo de infracción grave (0 = bajo, 1 = alto)",
+        "target": "Riesgo de infracción grave · 0 = bajo riesgo, 1 = alto riesgo",
         "supports_proba": hasattr(model, 'predict_proba')
     }
     if hasattr(model, 'classes_'):
@@ -568,6 +626,7 @@ def predict_batch_html():
   ]
 }</textarea>
                     <button onclick="enviarBatch()" style="margin-top:16px;">Evaluar lote</button>
+                    <div id="batch_error" style="display:none; color:#b33939; font-size:13px; margin-top:12px; background:#fdeeee; padding:10px 12px; border-radius:8px; border:1px solid #f1c0c0; line-height:1.6;"></div>
                 </div>
 
                 <div class="card" id="tabla_resultados">
@@ -607,20 +666,32 @@ def predict_batch_html():
 
                         if (data.detail) {
                             document.getElementById('tabla_resultados').style.display = 'none';
-                            alert('Error: ' + JSON.stringify(data.detail));
+                            let errMsg = '<b>⚠️ Error de validación:</b><br>';
+                            if (Array.isArray(data.detail)) {
+                                data.detail.forEach(e => {
+                                    const campo = e.loc ? e.loc[e.loc.length - 1] : 'campo';
+                                    errMsg += `• <b>${campo}</b>: ${e.msg}<br>`;
+                                });
+                            } else {
+                                errMsg += JSON.stringify(data.detail);
+                            }
+                            const batchErr = document.getElementById('batch_error');
+                            batchErr.style.display = 'block';
+                            batchErr.innerHTML = errMsg;
                             return;
                         }
+                        document.getElementById('batch_error').style.display = 'none';
 
                         document.getElementById('resumen_titulo').textContent =
                             'Resultados del lote (' + data.total + ' registros)';
 
-                        let html = '<table><thead><tr><th>#</th><th>Predicción</th><th>Probabilidad</th><th>Estado</th></tr></thead><tbody>';
+                        let html = '<table><thead><tr><th>#</th><th>Estado</th><th>Probabilidad</th><th>Clase (0/1)</th></tr></thead><tbody>';
                         for (const r of data.resultados) {
                             const risk = r.prediction === 1;
                             const label = risk ? '<span class="high">⚠️ Riesgo ALTO</span>' : '<span class="low">✅ Riesgo BAJO</span>';
                             const prob = r.probability !== null && r.probability !== undefined
                                 ? (r.probability * 100).toFixed(1) + '%' : 'N/A';
-                            html += `<tr><td>${r.index}</td><td>${r.prediction}</td><td>${prob}</td><td>${label}</td></tr>`;
+                            html += `<tr><td>${r.index}</td><td>${label}</td><td>${prob}</td><td>${r.prediction}</td></tr>`;
                         }
                         html += '</tbody></table>';
 
